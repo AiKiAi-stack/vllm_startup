@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+include pyproject.toml
+include CHANGELOG.md
+recursive-include src *.py
+recursive-include tests *.py
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude __pycache__
+global-exclude .git
+global-exclude .gitignore
+global-exclude *.md
+global-exclude .github
