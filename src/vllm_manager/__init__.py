@@ -27,11 +27,11 @@ from .core import VLLMManager, VLLMConfig, serve
 from .enhanced import VLLMCluster, health_monitor, ServerInstance
 
 __version__ = "0.1.0"
-__author__ = "Your Name"
-__author_email__ = "your.email@example.com"
+__author__ = "AiKiAi-stack"
+__author_email__ = "aikeai.stack@gmail.com"
 __license__ = "MIT"
 __description__ = "Manage vLLM API server lifecycle with ease"
-__url__ = "https://github.com/yourusername/vllm-manager"
+__url__ = "https://github.com/AiKiAi-stack/vllm_startup"
 
 __all__ = [
     # Core classes

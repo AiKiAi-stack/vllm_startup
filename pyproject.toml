@@ -54,11 +54,11 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/vllm-manager"
-Documentation = "https://github.com/yourusername/vllm-manager#readme"
-Repository = "https://github.com/yourusername/vllm-manager.git"
-Issues = "https://github.com/yourusername/vllm-manager/issues"
-Changelog = "https://github.com/yourusername/vllm-manager/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/AiKiAi-stack/vllm_startup"
+Documentation = "https://github.com/AiKiAi-stack/vllm_startup#readme"
+Repository = "https://github.com/AiKiAi-stack/vllm_startup.git"
+Issues = "https://github.com/AiKiAi-stack/vllm_startup/issues"
+Changelog = "https://github.com/AiKiAi-stack/vllm_startup/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
