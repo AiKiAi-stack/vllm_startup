@@ -3,7 +3,7 @@
 <!-- Logo Placeholder -->
 <!-- <img src="assets/logo.jpg" alt="vLLM Manager" width="512"> -->
 
-# vLLM Manager: vLLM Server Management Tool
+# vLLM Manager: vLLM Cluster Orchestrator
 
 ### Write Once, Use Forever. No More vLLM Worries!
 
@@ -23,380 +23,306 @@
 
 ---
 
+## 🎯 What is vLLM Manager?
+
+**vLLM Manager is NOT a replacement for vLLM. It enhances vLLM with multi-instance orchestration capabilities.**
+
+Think of it as:
+- **Kubernetes for vLLM** - Manage multiple vLLM instances as a cluster
+- **Load Balancer for LLMs** - Intelligent request routing across instances
+- **High Availability Layer** - Automatic failover and health monitoring
+
+### Why vLLM Manager?
+
+While vLLM provides excellent single-instance serving capabilities, production deployments often need:
+
+| Requirement | vLLM Alone | With vLLM Manager |
+|-------------|-----------|-------------------|
+| Multiple models on different GPUs | ❌ Manual setup | ✅ Automatic orchestration |
+| Load balancing across instances | ❌ Not supported | ✅ Built-in routing strategies |
+| Automatic failover | ❌ Not supported | ✅ Health checks & auto-restart |
+| Unified API endpoint | ❌ Multiple ports | ✅ Single entry point |
+| Request queueing | ❌ Not supported | ✅ Built-in queue management |
+
 ## 🚀 Features
 
-- **🎯 Two Startup Modes**: Parameterized configuration or full command execution
-- **📝 Comprehensive Logging**: Automatic log files with model name, date, and server identifier
-- **🛑 Graceful Shutdown**: Proper process termination with timeout and force kill fallback
-- **❤️ Health Monitoring**: Built-in health check and readiness detection
-- **🖥️ Multi-Server Management**: Cluster support for running multiple instances
-- **🔄 Auto-Restart**: Automatic server restart on failure (optional)
-- **🎮 CUDA Management**: GPU device selection and resource management
-- **🔧 Context Manager Support**: Clean resource management with `with` statement
+- **🎯 Multi-Instance Cluster Management**: Manage multiple vLLM instances as a unified cluster
+- **⚖️ Intelligent Load Balancing**: Route requests using round-robin, random, or health-priority strategies
+- **🔄 Automatic Failover**: Detect unhealthy instances and route to healthy ones automatically
+- **❤️ Health Monitoring**: Continuous health checks with automatic recovery
+- **📊 Request Metrics**: Track latency, error rates, and throughput per instance
+- **🔧 Pythonic API**: Simple, intuitive interface for cluster operations
+- **🌐 OpenAI-Compatible**: Works with vLLM's native OpenAI-compatible API
 
 ## 📦 Installation
 
 ```bash
-# Ensure vLLM is installed
+# Install vLLM first
 pip install vllm
 
 # Install vLLM Manager
 pip install vllm-manager
-
-# Import and use
-from vllm_manager import VLLMManager
 ```
 
 ## 🎬 Quick Start
 
-### Basic Usage
+### 1. Start vLLM Instances
 
-```python
-from vllm_manager import VLLMManager
+First, start your vLLM servers using the official vLLM CLI:
 
-# Create manager and start server
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(host="0.0.0.0", port=8000)
+```bash
+# Terminal 1 - Server 1
+vllm serve facebook/opt-125m --port 8000
 
-# Check status
-print(manager.get_status())
-# {'running': True, 'pid': 12345, 'model': 'facebook/opt-125m', ...}
-
-# Wait for server to be ready
-manager.wait_for_ready(timeout=60)
-
-# Stop when done
-manager.stop()
+# Terminal 2 - Server 2
+vllm serve facebook/opt-350m --port 8001
 ```
 
-### Parameterized Startup
+### 2. Create a Cluster
 
 ```python
-manager = VLLMManager(model="meta-llama/Llama-2-7b-hf")
-
-manager.start(
-    host="0.0.0.0",
-    port=8000,
-    tensor_parallel_size=2,      # Multi-GPU
-    gpu_memory_utilization=0.9,
-    max_model_len=4096,
-    dtype="float16",
-    quantization="awq",          # Optional: AWQ quantization
-    api_key="your-api-key",      # Optional: API authentication
-)
-```
-
-### Full Command Startup
-
-```python
-manager = VLLMManager()
-
-# Start with complete command
-manager.start_command(
-    "vllm serve facebook/opt-125m --port 8000 --tensor-parallel-size 2"
-)
-
-# Or as list
-manager.start_command([
-    "vllm", "serve", "facebook/opt-125m",
-    "--port", "8000",
-    "--host", "0.0.0.0"
-])
-```
-
-### Context Manager
-
-```python
-from vllm_manager import VLLMManager
-
-with VLLMManager(model="facebook/opt-125m") as manager:
-    manager.start(port=8000)
-    # Server runs here
-    # Automatically stopped when exiting context
-```
-
-### Convenience Function
-
-```python
-from vllm_manager import serve
-
-# Quick one-liner
-manager = serve("facebook/opt-125m", port=8001)
-# ... use the server ...
-manager.stop()
-```
-
-## 🖥️ Advanced Features
-
-### Multi-Server Cluster
-
-```python
-from vllm_manager import VLLMCluster
+from vllm_manager import VLLMCluster, VLLMInstance
 
 # Create cluster
 cluster = VLLMCluster()
 
-# Add multiple servers
-cluster.add_server("small", model="facebook/opt-125m", port=8001)
-cluster.add_server("medium", model="facebook/opt-350m", port=8002, auto_restart=True)
+# Add instances (assumes vLLM is already running)
+cluster.add_instance(VLLMInstance(
+    name="server1",
+    base_url="http://localhost:8000",
+    model="facebook/opt-125m"
+))
 
-# Start all
-results = cluster.start_all()
+cluster.add_instance(VLLMInstance(
+    name="server2", 
+    base_url="http://localhost:8001",
+    model="facebook/opt-350m"
+))
 
-# Health check
+# Check health
 health = cluster.health_check()
-
-# Get status
-status = cluster.get_status()
-
-# Stop all
-cluster.stop_all()
+print(f"Health status: {health}")
 ```
+
+### 3. Route Requests with Load Balancing
+
+```python
+from vllm_manager import VLLMRouter, RoutingStrategy
+
+# Create router with round-robin strategy
+router = VLLMRouter(cluster, strategy=RoutingStrategy.ROUND_ROBIN)
+
+# Make requests (automatically load balanced)
+response = router.chat_completion(
+    model="facebook/opt-125m",
+    messages=[{"role": "user", "content": "Hello, how are you?"}]
+)
+
+print(response["choices"][0]["message"]["content"])
+```
+
+### 4. Use the Cluster Directly
+
+```python
+# Chat completion (auto-routed to appropriate instance)
+response = cluster.chat_completion(
+    model="facebook/opt-125m",
+    messages=[{"role": "user", "content": "Tell me a joke"}]
+)
+
+# Text completion
+response = cluster.completion(
+    model="facebook/opt-350m",
+    prompt="Once upon a time",
+    max_tokens=100
+)
+
+# Get metrics
+metrics = cluster.get_metrics()
+print(f"Cluster metrics: {metrics}")
+```
+
+## 🖥️ Advanced Usage
 
 ### Configuration Persistence
 
 ```python
-from vllm_manager import VLLMCluster
+# Save cluster configuration
+cluster.save_config("cluster.json")
 
-# Save configuration
-cluster = VLLMCluster()
-cluster.add_server("model1", model="facebook/opt-125m", port=8001)
-cluster.save_config("config.json")
-
-# Load configuration
-cluster = VLLMCluster.load_config("config.json")
+# Load configuration later
+cluster = VLLMCluster.load_config("cluster.json")
 ```
 
-### GPU Selection
+### Custom Routing Strategy
 
 ```python
-from vllm_manager import VLLMManager
+from vllm_manager import RoutingStrategy
 
-# Select specific GPUs
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(
-    port=8000,
-    cuda_devices=[0, 1],  # Use GPUs 0 and 1
-    tensor_parallel_size=2,
-)
+# Health-priority: route to healthiest instance
+router = VLLMRouter(cluster, strategy=RoutingStrategy.HEALTH_PRIORITY)
+
+# Least-connections: route to least busy instance
+router = VLLMRouter(cluster, strategy=RoutingStrategy.LEAST_CONNECTIONS)
 ```
 
-### Health Monitoring
+### Direct Client Access
 
 ```python
-from vllm_manager import VLLMManager, health_monitor
-import threading
+from vllm_manager import VLLMClient
 
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(port=8000)
+# Connect directly to a vLLM instance
+client = VLLMClient(base_url="http://localhost:8000")
 
-# Start health monitoring in background thread
-monitor_thread = threading.Thread(
-    target=health_monitor,
-    args=(manager,),
-    kwargs={"interval": 30, "max_failures": 3},
-    daemon=True
-)
-monitor_thread.start()
+# Health check
+if client.health_check():
+    response = client.chat_completion(
+        model="facebook/opt-125m",
+        messages=[{"role": "user", "content": "Hi!"}]
+    )
+```
+
+### Auto-Restart on Failure
+
+```python
+# Enable auto-restart for critical instances
+cluster.add_instance(VLLMInstance(
+    name="critical-server",
+    base_url="http://localhost:8000",
+    auto_restart=True,
+    max_restarts=3
+))
+
+# Health check will automatically restart failed instances
+cluster.health_check()
 ```
 
 ## 📖 API Reference
 
-### VLLMManager
+### VLLMInstance
 
-#### Initialization
+Represents a single vLLM instance.
 
 ```python
-VLLMManager(
-    model: Optional[str] = None,       # Model name/path
-    log_dir: Optional[Path] = None,    # Log directory
-    server_id: Optional[str] = None,   # Custom server ID
+VLLMInstance(
+    name: str,                    # Unique instance name
+    base_url: str,                 # vLLM server URL
+    model: Optional[str] = None,   # Model name (optional)
+    api_key: Optional[str] = None, # API key (optional)
+    auto_restart: bool = False,    # Enable auto-restart
+    max_restarts: int = 3,         # Max restart attempts
 )
 ```
 
-#### Methods
-
-| Method | Description |
-|--------|-------------|
-| `start(**kwargs)` | Start server with parameters |
-| `start_command(cmd)` | Start server with full command |
-| `stop(timeout=30, force=False)` | Stop server gracefully |
-| `is_running()` | Check if server is running |
-| `get_pid()` | Get server process ID |
-| `get_uptime()` | Get server uptime string |
-| `wait_for_ready(timeout=60)` | Wait for server readiness |
-| `get_log_file()` | Get log file path |
-| `get_status()` | Get comprehensive status dict |
-
-#### Start Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model` | str | - | Model name or path |
-| `host` | str | "0.0.0.0" | Bind address |
-| `port` | int | 8000 | Port number |
-| `tensor_parallel_size` | int | 1 | GPU count for parallelism |
-| `dtype` | str | "auto" | Data type (auto, float16, etc.) |
-| `max_model_len` | int | None | Maximum context length |
-| `gpu_memory_utilization` | float | 0.9 | GPU memory ratio |
-| `swap_space` | int | 4 | CPU swap space (GB) |
-| `quantization` | str | None | Quantization method (awq, gptq, etc.) |
-| `api_key` | str | None | API authentication key |
-| `cuda_devices` | List[int] | None | GPU device IDs |
-| `additional_args` | List[str] | [] | Extra command-line arguments |
+Methods:
+- `health_check()` - Check if instance is healthy
+- `chat_completion(**kwargs)` - Send chat completion request
+- `completion(**kwargs)` - Send text completion request
+- `embedding(**kwargs)` - Send embedding request
+- `get_metrics()` - Get instance metrics
 
 ### VLLMCluster
 
-#### Methods
-
-| Method | Description |
-|--------|-------------|
-| `add_server(name, model, port, **kwargs)` | Add server instance |
-| `start_server(name)` | Start specific server |
-| `stop_server(name)` | Stop specific server |
-| `start_all()` | Start all servers |
-| `stop_all()` | Stop all servers |
-| `health_check(timeout=5)` | Check all servers' health |
-| `get_status()` | Get all servers' status |
-| `save_config(path)` | Save configuration to JSON |
-| `load_config(path)` | Load configuration from JSON |
-
-## 📁 Log Files
-
-Logs are stored in `./vllm_logs/` by default with naming format:
-
-```
-vllm_{model_name}_{YYYYMMDD}_{server_id}.log
-```
-
-Example:
-```
-vllm_facebook_opt-125m_20260226_srv_20260226105451.log
-```
-
-Log format:
-```
-2026-02-26 10:54:51 [INFO] [vllm.srv_20260226105451] VLLMManager initialized
-2026-02-26 10:54:52 [INFO] [vllm.srv_20260226105451] Starting vLLM server: vllm serve ...
-2026-02-26 10:54:53 [INFO] [vllm.srv_20260226105451] vLLM server started with PID: 12345
-```
-
-## ⚠️ Error Handling
+Manages multiple VLLMInstance objects.
 
 ```python
+VLLMCluster()
+```
+
+Methods:
+- `add_instance(instance)` - Add instance to cluster
+- `remove_instance(name)` - Remove instance from cluster
+- `health_check()` - Check health of all instances
+- `get_healthy_instances()` - Get list of healthy instances
+- `chat_completion(**kwargs)` - Route chat completion request
+- `completion(**kwargs)` - Route completion request
+- `get_metrics()` - Get metrics for all instances
+- `save_config(path)` - Save configuration to JSON
+- `load_config(path)` - Load configuration from JSON
+
+### VLLMRouter
+
+Intelligent request router with multiple strategies.
+
+```python
+VLLMRouter(
+    cluster: VLLMCluster,
+    strategy: RoutingStrategy = RoutingStrategy.ROUND_ROBIN,
+    health_check_interval: float = 30.0,
+)
+```
+
+Routing Strategies:
+- `ROUND_ROBIN` - Distribute requests evenly
+- `RANDOM` - Random instance selection
+- `LEAST_CONNECTIONS` - Route to least recently used
+- `HEALTH_PRIORITY` - Prioritize healthiest instances
+
+### VLLMClient
+
+Direct client for vLLM's OpenAI-compatible API.
+
+```python
+VLLMClient(
+    base_url: str,                  # vLLM server URL
+    api_key: Optional[str] = None,  # API key (optional)
+    timeout: float = 30.0,          # Request timeout
+)
+```
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Your Application                          │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  VLLMRouter / VLLMCluster                   │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  Load Balancing │ Health Checks │ Failover │ Metrics  │  │
+│  └───────────────────────────────────────────────────────┘  │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+         ┌───────────┼───────────┐
+         ▼           ▼           ▼
+    ┌────────┐  ┌────────┐  ┌────────┐
+    │vLLM #1 │  │vLLM #2 │  │vLLM #3 │
+    │:8000   │  │:8001   │  │:8002   │
+    └────────┘  └────────┘  └────────┘
+```
+
+## ⚠️ Migration from v0.1.x
+
+**Breaking Changes in v0.2.0:**
+
+vLLM Manager v0.2.0 is a complete rewrite focused on cluster management rather than process management.
+
+### Old API (v0.1.x) - REMOVED
+```python
+# ❌ No longer supported
 from vllm_manager import VLLMManager
 
 manager = VLLMManager(model="facebook/opt-125m")
-
-try:
-    manager.start(port=8000)
-except RuntimeError as e:
-    # Server already running
-    print(f"Error: {e}")
-except ValueError as e:
-    # Model not specified
-    print(f"Error: {e}")
-except Exception as e:
-    # Other errors
-    print(f"Error: {e}")
-finally:
-    manager.stop()
+manager.start(port=8000)  # This managed subprocess - REMOVED
 ```
 
-## 💡 Examples
-
-### Example 1: Simple Server
-
+### New API (v0.2.0+)
 ```python
-from vllm_manager import VLLMManager
+# ✅ New approach - vLLM Manager manages clusters, not processes
+from vllm_manager import VLLMCluster, VLLMInstance
 
-# Start server
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(port=8000)
+# Start vLLM using official CLI
+# vllm serve facebook/opt-125m --port 8000
 
-# Keep running
-import time
-while manager.is_running():
-    time.sleep(1)
+# Then manage with vLLM Manager
+cluster = VLLMCluster()
+cluster.add_instance(VLLMInstance("server1", "http://localhost:8000"))
 ```
 
-### Example 2: Production Deployment
-
-```python
-from vllm_manager import VLLMManager
-import logging
-
-# Setup
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Start with production config
-manager = VLLMManager(
-    model="meta-llama/Llama-2-70b-hf",
-    log_dir="/var/log/vllm",
-)
-
-try:
-    manager.start(
-        host="0.0.0.0",
-        port=8000,
-        tensor_parallel_size=4,
-        gpu_memory_utilization=0.95,
-        api_key="secret-key",
-        disable_log_requests=False,
-    )
-    
-    # Wait for ready
-    if not manager.wait_for_ready(timeout=120):
-        raise RuntimeError("Server failed to start")
-    
-    logger.info("Server is ready!")
-    
-    # Keep running
-    while True:
-        time.sleep(1)
-        
-except KeyboardInterrupt:
-    logger.info("Shutting down...")
-    manager.stop(timeout=60)
-except Exception as e:
-    logger.error(f"Error: {e}")
-    manager.stop(force=True)
-    raise
-```
-
-### Example 3: Multiple Models
-
-```python
-from vllm_manager import VLLMCluster
-
-# Create cluster for multiple models
-cluster = VLLMCluster(log_dir="/var/log/vllm")
-
-# Add models
-cluster.add_server(
-    "llama-7b",
-    model="meta-llama/Llama-2-7b-hf",
-    port=8001,
-    auto_restart=True,
-)
-cluster.add_server(
-    "llama-70b",
-    model="meta-llama/Llama-2-70b-hf",
-    port=8002,
-    tensor_parallel_size=4,
-)
-
-# Start all
-cluster.start_all()
-
-# Monitor
-import time
-while True:
-    status = cluster.get_status()
-    print(f"Status: {status}")
-    time.sleep(10)
-```
+**Why the change?**
+vLLM already provides excellent process management. vLLM Manager now focuses on what vLLM doesn't provide: multi-instance orchestration.
 
 ## 📄 License
 
@@ -405,6 +331,8 @@ MIT License
 ## 🤝 Contributing
 
 Contributions welcome! Please feel free to submit issues and pull requests.
+
+See [ROADMAP.md](ROADMAP.md) for planned features.
 
 ---
 
