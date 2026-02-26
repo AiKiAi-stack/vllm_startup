@@ -10,11 +10,8 @@ jobs:
   build-and-publish:
     name: Build and publish to PyPI
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/vllm-manager
     permissions:
-      id-token: write  # IMPORTANT: required for trusted publishing
+      contents: read
       contents: read
 
     steps:
@@ -41,6 +38,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           print-hash: true
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
   test-install:
     name: Test installation
