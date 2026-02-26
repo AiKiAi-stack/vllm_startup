@@ -1,29 +1,53 @@
-# vLLM Server Manager
+<div align="center">
 
-A comprehensive Python package for managing vLLM API server lifecycle with proper logging, process management, and multi-server support.
+<!-- Logo Placeholder -->
+<!-- <img src="assets/logo.jpg" alt="vLLM Manager" width="512"> -->
 
-## Features
+# vLLM Manager: vLLM Server Management Tool
 
-- **Two Startup Modes**: Parameterized configuration or full command execution
-- **Comprehensive Logging**: Automatic log files with model name, date, and server identifier
-- **Graceful Shutdown**: Proper process termination with timeout and force kill fallback
-- **Health Monitoring**: Built-in health check and readiness detection
-- **Multi-Server Management**: Cluster support for running multiple instances
-- **Auto-Restart**: Automatic server restart on failure (optional)
-- **CUDA Management**: GPU device selection and resource management
-- **Context Manager Support**: Clean resource management with `with` statement
+### Write Once, Use Forever. No More vLLM Worries!
 
-## Installation
+  <p>
+    <img src="https://img.shields.io/badge/Python-3.8+-3776AB?style=flat&logo=python&logoColor=white" alt="Python">
+    <img src="https://img.shields.io/badge/vLLM-Ready-brightgreen?style=flat&logo=cpu&logoColor=white" alt="vLLM Ready">
+    <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+    <br>
+    <a href="https://pypi.org/project/vllm-manager/"><img src="https://img.shields.io/pypi/v/vllm-manager?color=blue&logo=pypi&logoColor=white" alt="PyPI"></a>
+    <a href="https://github.com/AiKiAi-stack/vllm_startup"><img src="https://img.shields.io/github/stars/AiKiAi-stack/vllm_startup?style=flat&logo=github" alt="GitHub Stars"></a>
+    <a href="https://github.com/AiKiAi-stack/vllm_startup/issues"><img src="https://img.shields.io/github/issues/AiKiAi-stack/vllm_startup" alt="Issues"></a>
+  </p>
+
+**English** | [中文](README.zh.md)
+
+</div>
+
+---
+
+## 🚀 Features
+
+- **🎯 Two Startup Modes**: Parameterized configuration or full command execution
+- **📝 Comprehensive Logging**: Automatic log files with model name, date, and server identifier
+- **🛑 Graceful Shutdown**: Proper process termination with timeout and force kill fallback
+- **❤️ Health Monitoring**: Built-in health check and readiness detection
+- **🖥️ Multi-Server Management**: Cluster support for running multiple instances
+- **🔄 Auto-Restart**: Automatic server restart on failure (optional)
+- **🎮 CUDA Management**: GPU device selection and resource management
+- **🔧 Context Manager Support**: Clean resource management with `with` statement
+
+## 📦 Installation
 
 ```bash
 # Ensure vLLM is installed
 pip install vllm
 
-# Import the manager
+# Install vLLM Manager
+pip install vllm-manager
+
+# Import and use
 from vllm_manager import VLLMManager
 ```
 
-## Quick Start
+## 🎬 Quick Start
 
 ### Basic Usage
 
@@ -102,7 +126,7 @@ manager = serve("facebook/opt-125m", port=8001)
 manager.stop()
 ```
 
-## Advanced Features
+## 🖥️ Advanced Features
 
 ### Multi-Server Cluster
 
@@ -176,7 +200,7 @@ monitor_thread = threading.Thread(
 monitor_thread.start()
 ```
 
-## API Reference
+## 📖 API Reference
 
 ### VLLMManager
 
@@ -192,15 +216,17 @@ VLLMManager(
 
 #### Methods
 
-- `start(**kwargs)` - Start server with parameters
-- `start_command(cmd)` - Start server with full command
-- `stop(timeout=30, force=False)` - Stop server gracefully
-- `is_running()` - Check if server is running
-- `get_pid()` - Get server process ID
-- `get_uptime()` - Get server uptime string
-- `wait_for_ready(timeout=60)` - Wait for server readiness
-- `get_log_file()` - Get log file path
-- `get_status()` - Get comprehensive status dict
+| Method | Description |
+|--------|-------------|
+| `start(**kwargs)` | Start server with parameters |
+| `start_command(cmd)` | Start server with full command |
+| `stop(timeout=30, force=False)` | Stop server gracefully |
+| `is_running()` | Check if server is running |
+| `get_pid()` | Get server process ID |
+| `get_uptime()` | Get server uptime string |
+| `wait_for_ready(timeout=60)` | Wait for server readiness |
+| `get_log_file()` | Get log file path |
+| `get_status()` | Get comprehensive status dict |
 
 #### Start Parameters
 
@@ -223,17 +249,19 @@ VLLMManager(
 
 #### Methods
 
-- `add_server(name, model, port, **kwargs)` - Add server instance
-- `start_server(name)` - Start specific server
-- `stop_server(name)` - Stop specific server
-- `start_all()` - Start all servers
-- `stop_all()` - Stop all servers
-- `health_check(timeout=5)` - Check all servers' health
-- `get_status()` - Get all servers' status
-- `save_config(path)` - Save configuration to JSON
-- `load_config(path)` - Load configuration from JSON
+| Method | Description |
+|--------|-------------|
+| `add_server(name, model, port, **kwargs)` | Add server instance |
+| `start_server(name)` | Start specific server |
+| `stop_server(name)` | Stop specific server |
+| `start_all()` | Start all servers |
+| `stop_all()` | Stop all servers |
+| `health_check(timeout=5)` | Check all servers' health |
+| `get_status()` | Get all servers' status |
+| `save_config(path)` | Save configuration to JSON |
+| `load_config(path)` | Load configuration from JSON |
 
-## Log Files
+## 📁 Log Files
 
 Logs are stored in `./vllm_logs/` by default with naming format:
 
@@ -253,7 +281,7 @@ Log format:
 2026-02-26 10:54:53 [INFO] [vllm.srv_20260226105451] vLLM server started with PID: 12345
 ```
 
-## Error Handling
+## ⚠️ Error Handling
 
 ```python
 from vllm_manager import VLLMManager
@@ -275,7 +303,7 @@ finally:
     manager.stop()
 ```
 
-## Examples
+## 💡 Examples
 
 ### Example 1: Simple Server
 
@@ -370,10 +398,18 @@ while True:
     time.sleep(10)
 ```
 
-## License
+## 📄 License
 
 MIT License
 
-## Contributing
+## 🤝 Contributing
 
 Contributions welcome! Please feel free to submit issues and pull requests.
+
+---
+
+<div align="center">
+
+**🎉 If you find this useful, please give us a Star!**
+
+</div>
