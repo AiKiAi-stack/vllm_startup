@@ -57,6 +57,3 @@ jobs:
         run: |
           pip install vllm vllm-manager
           python -c "from vllm_manager import VLLMCluster, VLLMInstance; print('Installation successful!')"
-        run: |
-          pip install vllm-manager
-          python -c "from vllm_manager import VLLMCluster; print('Installation successful!')"
