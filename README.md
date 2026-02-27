@@ -27,7 +27,7 @@ vLLM Manager provides multi-instance vLLM cluster management, automatic log coll
 ## ✨ Features
 
 - 🎯 **Multi-Instance Management**: Start/stop multiple vLLM instances with one command
-- 📝 **Automatic Logging**: All logs saved to `./vllm_logs/` automatically
+- 📝 **Automatic Logging**: Log files named by model and port for easy identification
 - 🔄 **Failover**: Auto-retry on other instances when request fails
 - ❤️ **Health Monitoring**: Continuous instance health checks
 - 🔧 **OpenAI SDK**: Returns standard OpenAI client, seamless integration
@@ -47,10 +47,10 @@ vLLM Manager provides multi-instance vLLM cluster management, automatic log coll
 pip install vllm
 
 # 2. Install dependencies
-pip install openai requests
+pip install -r requirements.txt
 
-# 3. Install vLLM Manager
-pip install vllm-manager
+# Or install individually
+pip install openai requests
 ```
 
 ## 🚀 Quick Start
@@ -88,26 +88,37 @@ print(response)
 cluster.stop_all()
 ```
 
-### Context Manager
+### Multi-Model Example
 
 ```python
 from vllm_manager import VLLMCluster, VLLMInstance
 
-with VLLMCluster() as cluster:
-    cluster.add_instance(VLLMInstance(
-        name="server1",
-        model="facebook/opt-125m",
-        port=8000
-    ))
-    cluster.start_all()
-    
-    client = cluster.get_openai_client()
-    response = client.chat.completions.create(
-        model="facebook/opt-125m",
-        messages=[{"role": "user", "content": "Hello!"}]
-    )
-    print(response.choices[0].message.content)
-# Automatically stops all instances on exit
+cluster = VLLMCluster()
+
+# Add instances with different models
+cluster.add_instance(VLLMInstance(
+    name="qwen-server",
+    model="Qwen/Qwen2.5-1.5B-Instruct",
+    port=8000,
+))
+
+cluster.add_instance(VLLMInstance(
+    name="llama-server",
+    model="meta-llama/Llama-2-7b-chat",
+    port=8001,
+))
+
+cluster.start_all()
+
+# View model name for each instance
+for instance in cluster.instances.values():
+    print(f"{instance.name}: {instance.served_model_name}")
+# qwen-server: Qwen2.5-1.5B-Instruct
+# llama-server: Llama-2-7b-chat
+
+# Log files automatically include model name
+# vllm_Qwen2.5-1.5B-Instruct_8000_20260227_101234.log
+# vllm_Llama-2-7b-chat_8001_20260227_101235.log
 ```
 
 ## 📖 API Reference
@@ -131,6 +142,12 @@ VLLMInstance(
     dtype: str = "auto",
     # ... supports all AsyncEngineArgs parameters
 )
+
+# Properties
+instance.served_model_name  # Model name (last path component)
+instance.base_url           # http://host:port
+instance.api_url            # http://host:port/v1
+instance.log_file           # Log file path
 ```
 
 ### VLLMCluster
@@ -145,6 +162,17 @@ client = cluster.get_openai_client()
 ```
 
 ## 📝 Log Management
+
+### Log File Naming
+
+Log files are named by **model name + port + timestamp** for easy identification:
+
+```
+./vllm_logs/
+├── vllm_manager_20260227_101234.log          # Manager logs
+├── vllm_Qwen2.5-1.5B-Instruct_8000_101235.log  # Qwen model
+└── vllm_Llama-2-7b-chat_8001_101236.log        # Llama model
+```
 
 ### View Logs
 
@@ -162,15 +190,6 @@ for log in logs:
 aggregator.export_json("logs.json")
 ```
 
-### Log File Structure
-
-```
-./vllm_logs/
-├── vllm_manager_20260227_101234.log
-├── vllm_server1_20260227_101235.log
-└── vllm_server2_20260227_101236.log
-```
-
 ## ❓ FAQ
 
 ### Q: Why use vLLM Manager?
@@ -181,11 +200,16 @@ aggregator.export_json("logs.json")
 
 **A**: All `AsyncEngineArgs` parameters are supported, since `VLLMInstance` inherits from `AsyncEngineArgs`.
 
-### Q: Can I customize the log directory?
+### Q: How are log files named?
 
-**A**: Yes, specify via `log_dir` parameter:
+**A**: Format is `vllm_{model_name}_{port}_{timestamp}.log`, where `model_name` is the last component of the model path (e.g., `Qwen2.5-1.5B-Instruct`).
+
+### Q: How do I check which model each instance is running?
+
+**A**: Use the `instance.served_model_name` property:
 ```python
-cluster = VLLMCluster(log_dir="/var/log/vllm")
+for instance in cluster.instances.values():
+    print(f"{instance.name}: {instance.served_model_name}")
 ```
 
 ## 🤝 Contributing
