@@ -35,7 +35,7 @@ from .instance import VLLMInstance
 from .cluster import VLLMCluster
 from .logger import VLLMLogger, LogAggregator
 
-__version__ = "0.2.1"
+__version__ = "0.2.4"
 __author__ = "AiKiAi-stack"
 __author_email__ = "aikeai.stack@gmail.com"
 __license__ = "MIT"
