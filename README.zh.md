@@ -1,9 +1,9 @@
 <div align="center">
 
-<!-- Logo 待添加 -->
+<!-- Logo 占位符 -->
 <!-- <img src="assets/logo.jpg" alt="vLLM Manager" width="512"> -->
 
-# vLLM Manager: vLLM 服务器管理神器
+# vLLM Manager: vLLM 集群编排器
 
 ### 一次编写，终生使用，妈妈再也不用担心我的 vLLM 了
 
@@ -23,380 +23,306 @@
 
 ---
 
-## 🚀 特性亮点
+## 🎯 vLLM Manager 是什么？
 
-- **🎯 两种启动模式**：参数化配置 或 完整命令执行
-- **📝 全方位日志**：自动记录模型名称、日期和服务器标识
-- **🛑 优雅关闭**：优雅终止进程，超时自动强制杀死
-- **❤️ 健康监控**：内置健康检查和就绪检测
-- **🖥️ 多服务器管理**：集群支持，同时运行多个实例
-- **🔄 自动重启**：故障自动重启（可选）
-- **🎮 CUDA 管理**：GPU 设备选择和资源管理
-- **🔧 上下文管理器**：使用 `with` 语句优雅管理资源
+**vLLM Manager 不是 vLLM 的替代品。它为 vLLM 增加了多实例编排能力。**
 
-## 📦 快速安装
+可以把它想象成：
+- **vLLM 的 Kubernetes** - 将多个 vLLM 实例作为集群管理
+- **LLM 的负载均衡器** - 跨实例的智能请求路由
+- **高可用层** - 自动故障转移和健康监控
+
+### 为什么需要 vLLM Manager？
+
+虽然 vLLM 提供了优秀的单实例服务能力，但生产环境部署通常需要：
+
+| 需求 | 仅使用 vLLM | 配合 vLLM Manager |
+|------|------------|------------------|
+| 不同 GPU 上的多模型 | ❌ 手动配置 | ✅ 自动编排 |
+| 跨实例负载均衡 | ❌ 不支持 | ✅ 内置路由策略 |
+| 自动故障转移 | ❌ 不支持 | ✅ 健康检查 & 自动重启 |
+| 统一 API 端点 | ❌ 多端口 | ✅ 单一入口 |
+| 请求队列 | ❌ 不支持 | ✅ 内置队列管理 |
+
+## 🚀 功能特性
+
+- **🎯 多实例集群管理**：将多个 vLLM 实例作为统一集群管理
+- **⚖️ 智能负载均衡**：使用轮询、随机或健康优先策略路由请求
+- **🔄 自动故障转移**：自动检测不健康实例并路由到健康实例
+- **❤️ 健康监控**：持续健康检查与自动恢复
+- **📊 请求指标**：跟踪每个实例的延迟、错误率和吞吐量
+- **🔧 Pythonic API**：简单直观的集群操作接口
+- **🌐 OpenAI 兼容**：与 vLLM 原生 OpenAI 兼容 API 配合使用
+
+## 📦 安装
 
 ```bash
-# 确保已安装 vLLM
+# 先安装 vLLM
 pip install vllm
 
 # 安装 vLLM Manager
 pip install vllm-manager
-
-# 导入使用
-from vllm_manager import VLLMManager
 ```
 
 ## 🎬 快速开始
 
-### 基础用法
+### 1. 启动 vLLM 实例
 
-```python
-from vllm_manager import VLLMManager
+首先，使用官方 vLLM CLI 启动你的服务器：
 
-# 创建管理器并启动服务
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(host="0.0.0.0", port=8000)
+```bash
+# 终端 1 - 服务器 1
+vllm serve facebook/opt-125m --port 8000
 
-# 检查状态
-print(manager.get_status())
-# {'running': True, 'pid': 12345, 'model': 'facebook/opt-125m', ...}
-
-# 等待服务就绪
-manager.wait_for_ready(timeout=60)
-
-# 完成后停止
-manager.stop()
+# 终端 2 - 服务器 2
+vllm serve facebook/opt-350m --port 8001
 ```
 
-### 参数化启动
+### 2. 创建集群
 
 ```python
-manager = VLLMManager(model="meta-llama/Llama-2-7b-hf")
-
-manager.start(
-    host="0.0.0.0",
-    port=8000,
-    tensor_parallel_size=2,      # 多 GPU 并行
-    gpu_memory_utilization=0.9,
-    max_model_len=4096,
-    dtype="float16",
-    quantization="awq",          # 可选：AWQ 量化
-    api_key="your-api-key",      # 可选：API 认证
-)
-```
-
-### 完整命令启动
-
-```python
-manager = VLLMManager()
-
-# 使用完整命令启动
-manager.start_command(
-    "vllm serve facebook/opt-125m --port 8000 --tensor-parallel-size 2"
-)
-
-# 或使用列表形式
-manager.start_command([
-    "vllm", "serve", "facebook/opt-125m",
-    "--port", "8000",
-    "--host", "0.0.0.0"
-])
-```
-
-### 上下文管理器
-
-```python
-from vllm_manager import VLLMManager
-
-with VLLMManager(model="facebook/opt-125m") as manager:
-    manager.start(port=8000)
-    # 服务在这里运行
-    # 退出上下文时自动停止
-```
-
-### 便捷函数
-
-```python
-from vllm_manager import serve
-
-# 一行搞定
-manager = serve("facebook/opt-125m", port=8001)
-# ... 使用服务 ...
-manager.stop()
-```
-
-## 🖥️ 高级功能
-
-### 多服务器集群
-
-```python
-from vllm_manager import VLLMCluster
+from vllm_manager import VLLMCluster, VLLMInstance
 
 # 创建集群
 cluster = VLLMCluster()
 
-# 添加多个服务器
-cluster.add_server("small", model="facebook/opt-125m", port=8001)
-cluster.add_server("medium", model="facebook/opt-350m", port=8002, auto_restart=True)
+# 添加实例（假设 vLLM 已在运行）
+cluster.add_instance(VLLMInstance(
+    name="server1",
+    base_url="http://localhost:8000",
+    model="facebook/opt-125m"
+))
 
-# 全部启动
-results = cluster.start_all()
+cluster.add_instance(VLLMInstance(
+    name="server2", 
+    base_url="http://localhost:8001",
+    model="facebook/opt-350m"
+))
 
-# 健康检查
+# 检查健康状态
 health = cluster.health_check()
-
-# 获取状态
-status = cluster.get_status()
-
-# 全部停止
-cluster.stop_all()
+print(f"健康状态: {health}")
 ```
+
+### 3. 使用负载均衡路由请求
+
+```python
+from vllm_manager import VLLMRouter, RoutingStrategy
+
+# 创建轮询策略的路由器
+router = VLLMRouter(cluster, strategy=RoutingStrategy.ROUND_ROBIN)
+
+# 发送请求（自动负载均衡）
+response = router.chat_completion(
+    model="facebook/opt-125m",
+    messages=[{"role": "user", "content": "你好，最近怎么样？"}]
+)
+
+print(response["choices"][0]["message"]["content"])
+```
+
+### 4. 直接使用集群
+
+```python
+# 对话补全（自动路由到合适的实例）
+response = cluster.chat_completion(
+    model="facebook/opt-125m",
+    messages=[{"role": "user", "content": "给我讲个笑话"}]
+)
+
+# 文本补全
+response = cluster.completion(
+    model="facebook/opt-350m",
+    prompt="从前有座山",
+    max_tokens=100
+)
+
+# 获取指标
+metrics = cluster.get_metrics()
+print(f"集群指标: {metrics}")
+```
+
+## 🖥️ 高级用法
 
 ### 配置持久化
 
 ```python
-from vllm_manager import VLLMCluster
+# 保存集群配置
+cluster.save_config("cluster.json")
 
-# 保存配置
-cluster = VLLMCluster()
-cluster.add_server("model1", model="facebook/opt-125m", port=8001)
-cluster.save_config("config.json")
-
-# 加载配置
-cluster = VLLMCluster.load_config("config.json")
+# 之后加载配置
+cluster = VLLMCluster.load_config("cluster.json")
 ```
 
-### GPU 选择
+### 自定义路由策略
 
 ```python
-from vllm_manager import VLLMManager
+from vllm_manager import RoutingStrategy
 
-# 选择特定 GPU
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(
-    port=8000,
-    cuda_devices=[0, 1],  # 使用 GPU 0 和 1
-    tensor_parallel_size=2,
-)
+# 健康优先：路由到最健康的实例
+router = VLLMRouter(cluster, strategy=RoutingStrategy.HEALTH_PRIORITY)
+
+# 最少连接：路由到最不忙的实例
+router = VLLMRouter(cluster, strategy=RoutingStrategy.LEAST_CONNECTIONS)
 ```
 
-### 健康监控
+### 直接客户端访问
 
 ```python
-from vllm_manager import VLLMManager, health_monitor
-import threading
+from vllm_manager import VLLMClient
 
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(port=8000)
+# 直接连接到 vLLM 实例
+client = VLLMClient(base_url="http://localhost:8000")
 
-# 在后台线程中启动健康监控
-monitor_thread = threading.Thread(
-    target=health_monitor,
-    args=(manager,),
-    kwargs={"interval": 30, "max_failures": 3},
-    daemon=True
-)
-monitor_thread.start()
+# 健康检查
+if client.health_check():
+    response = client.chat_completion(
+        model="facebook/opt-125m",
+        messages=[{"role": "user", "content": "你好！"}]
+    )
+```
+
+### 故障时自动重启
+
+```python
+# 为关键实例启用自动重启
+cluster.add_instance(VLLMInstance(
+    name="critical-server",
+    base_url="http://localhost:8000",
+    auto_restart=True,
+    max_restarts=3
+))
+
+# 健康检查会自动重启失败的实例
+cluster.health_check()
 ```
 
 ## 📖 API 参考
 
-### VLLMManager
+### VLLMInstance
 
-#### 初始化
+代表单个 vLLM 实例。
 
 ```python
-VLLMManager(
-    model: Optional[str] = None,       # 模型名称/路径
-    log_dir: Optional[Path] = None,    # 日志目录
-    server_id: Optional[str] = None,   # 自定义服务器 ID
+VLLMInstance(
+    name: str,                    # 唯一实例名称
+    base_url: str,                 # vLLM 服务器 URL
+    model: Optional[str] = None,   # 模型名称（可选）
+    api_key: Optional[str] = None, # API 密钥（可选）
+    auto_restart: bool = False,    # 启用自动重启
+    max_restarts: int = 3,         # 最大重启次数
 )
 ```
 
-#### 方法
-
-| 方法 | 描述 |
-|------|------|
-| `start(**kwargs)` | 参数化启动服务 |
-| `start_command(cmd)` | 使用完整命令启动 |
-| `stop(timeout=30, force=False)` | 优雅停止服务 |
-| `is_running()` | 检查服务是否运行 |
-| `get_pid()` | 获取进程 ID |
-| `get_uptime()` | 获取运行时间 |
-| `wait_for_ready(timeout=60)` | 等待服务就绪 |
-| `get_log_file()` | 获取日志文件路径 |
-| `get_status()` | 获取综合状态字典 |
-
-#### 启动参数
-
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `model` | str | - | 模型名称或路径 |
-| `host` | str | "0.0.0.0" | 绑定地址 |
-| `port` | int | 8000 | 端口号 |
-| `tensor_parallel_size` | int | 1 | GPU 并行数量 |
-| `dtype` | str | "auto" | 数据类型 |
-| `max_model_len` | int | None | 最大上下文长度 |
-| `gpu_memory_utilization` | float | 0.9 | GPU 内存利用率 |
-| `swap_space` | int | 4 | CPU 交换空间 (GB) |
-| `quantization` | str | None | 量化方法 (awq, gptq 等) |
-| `api_key` | str | None | API 认证密钥 |
-| `cuda_devices` | List[int] | None | GPU 设备 ID 列表 |
-| `additional_args` | List[str] | [] | 额外命令行参数 |
+方法：
+- `health_check()` - 检查实例是否健康
+- `chat_completion(**kwargs)` - 发送对话补全请求
+- `completion(**kwargs)` - 发送文本补全请求
+- `embedding(**kwargs)` - 发送嵌入请求
+- `get_metrics()` - 获取实例指标
 
 ### VLLMCluster
 
-#### 方法
-
-| 方法 | 描述 |
-|------|------|
-| `add_server(name, model, port, **kwargs)` | 添加服务器实例 |
-| `start_server(name)` | 启动指定服务器 |
-| `stop_server(name)` | 停止指定服务器 |
-| `start_all()` | 启动所有服务器 |
-| `stop_all()` | 停止所有服务器 |
-| `health_check(timeout=5)` | 检查所有服务器健康状态 |
-| `get_status()` | 获取所有服务器状态 |
-| `save_config(path)` | 保存配置到 JSON |
-| `load_config(path)` | 从 JSON 加载配置 |
-
-## 📁 日志文件
-
-日志默认存储在 `./vllm_logs/` 目录下，命名格式：
-
-```
-vllm_{model_name}_{YYYYMMDD}_{server_id}.log
-```
-
-示例：
-```
-vllm_facebook_opt-125m_20260226_srv_20260226105451.log
-```
-
-日志格式：
-```
-2026-02-26 10:54:51 [INFO] [vllm.srv_20260226105451] VLLMManager 已初始化
-2026-02-26 10:54:52 [INFO] [vllm.srv_20260226105451] 正在启动 vLLM 服务：vllm serve ...
-2026-02-26 10:54:53 [INFO] [vllm.srv_20260226105451] vLLM 服务已启动，PID: 12345
-```
-
-## ⚠️ 错误处理
+管理多个 VLLMInstance 对象。
 
 ```python
+VLLMCluster()
+```
+
+方法：
+- `add_instance(instance)` - 添加实例到集群
+- `remove_instance(name)` - 从集群移除实例
+- `health_check()` - 检查所有实例的健康状态
+- `get_healthy_instances()` - 获取健康实例列表
+- `chat_completion(**kwargs)` - 路由对话补全请求
+- `completion(**kwargs)` - 路由补全请求
+- `get_metrics()` - 获取所有实例的指标
+- `save_config(path)` - 保存配置到 JSON
+- `load_config(path)` - 从 JSON 加载配置
+
+### VLLMRouter
+
+具有多种策略的智能请求路由器。
+
+```python
+VLLMRouter(
+    cluster: VLLMCluster,
+    strategy: RoutingStrategy = RoutingStrategy.ROUND_ROBIN,
+    health_check_interval: float = 30.0,
+)
+```
+
+路由策略：
+- `ROUND_ROBIN` - 均匀分配请求
+- `RANDOM` - 随机选择实例
+- `LEAST_CONNECTIONS` - 路由到最近最少使用
+- `HEALTH_PRIORITY` - 优先选择最健康的实例
+
+### VLLMClient
+
+vLLM OpenAI 兼容 API 的直接客户端。
+
+```python
+VLLMClient(
+    base_url: str,                  # vLLM 服务器 URL
+    api_key: Optional[str] = None,  # API 密钥（可选）
+    timeout: float = 30.0,          # 请求超时时间
+)
+```
+
+## 🏗️ 架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    你的应用程序                              │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  VLLMRouter / VLLMCluster                   │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  负载均衡 │ 健康检查 │ 故障转移 │ 指标监控              │  │
+│  └───────────────────────────────────────────────────────┘  │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+         ┌───────────┼───────────┐
+         ▼           ▼           ▼
+    ┌────────┐  ┌────────┐  ┌────────┐
+    │vLLM #1 │  │vLLM #2 │  │vLLM #3 │
+    │:8000   │  │:8001   │  │:8002   │
+    └────────┘  └────────┘  └────────┘
+```
+
+## ⚠️ 从 v0.1.x 迁移
+
+**v0.2.0 中的破坏性变更：**
+
+vLLM Manager v0.2.0 是一次完全重写，专注于集群管理而非进程管理。
+
+### 旧 API (v0.1.x) - 已移除
+```python
+# ❌ 不再支持
 from vllm_manager import VLLMManager
 
 manager = VLLMManager(model="facebook/opt-125m")
-
-try:
-    manager.start(port=8000)
-except RuntimeError as e:
-    # 服务已在运行
-    print(f"错误：{e}")
-except ValueError as e:
-    # 未指定模型
-    print(f"错误：{e}")
-except Exception as e:
-    # 其他错误
-    print(f"错误：{e}")
-finally:
-    manager.stop()
+manager.start(port=8000)  # 这管理子进程 - 已移除
 ```
 
-## 💡 使用示例
-
-### 示例 1：简单服务
-
+### 新 API (v0.2.0+)
 ```python
-from vllm_manager import VLLMManager
+# ✅ 新方式 - vLLM Manager 管理集群，而非进程
+from vllm_manager import VLLMCluster, VLLMInstance
 
-# 启动服务
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(port=8000)
+# 使用官方 CLI 启动 vLLM
+# vllm serve facebook/opt-125m --port 8000
 
-# 保持运行
-import time
-while manager.is_running():
-    time.sleep(1)
+# 然后使用 vLLM Manager 管理
+cluster = VLLMCluster()
+cluster.add_instance(VLLMInstance("server1", "http://localhost:8000"))
 ```
 
-### 示例 2：生产环境部署
-
-```python
-from vllm_manager import VLLMManager
-import logging
-
-# 配置日志
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# 使用生产配置启动
-manager = VLLMManager(
-    model="meta-llama/Llama-2-70b-hf",
-    log_dir="/var/log/vllm",
-)
-
-try:
-    manager.start(
-        host="0.0.0.0",
-        port=8000,
-        tensor_parallel_size=4,
-        gpu_memory_utilization=0.95,
-        api_key="secret-key",
-        disable_log_requests=False,
-    )
-    
-    # 等待就绪
-    if not manager.wait_for_ready(timeout=120):
-        raise RuntimeError("服务启动失败")
-    
-    logger.info("服务已就绪！")
-    
-    # 保持运行
-    while True:
-        time.sleep(1)
-        
-except KeyboardInterrupt:
-    logger.info("正在关闭...")
-    manager.stop(timeout=60)
-except Exception as e:
-    logger.error(f"错误：{e}")
-    manager.stop(force=True)
-    raise
-```
-
-### 示例 3：多模型部署
-
-```python
-from vllm_manager import VLLMCluster
-
-# 创建多模型集群
-cluster = VLLMCluster(log_dir="/var/log/vllm")
-
-# 添加模型
-cluster.add_server(
-    "llama-7b",
-    model="meta-llama/Llama-2-7b-hf",
-    port=8001,
-    auto_restart=True,
-)
-cluster.add_server(
-    "llama-70b",
-    model="meta-llama/Llama-2-70b-hf",
-    port=8002,
-    tensor_parallel_size=4,
-)
-
-# 全部启动
-cluster.start_all()
-
-# 监控
-import time
-while True:
-    status = cluster.get_status()
-    print(f"状态：{status}")
-    time.sleep(10)
-```
+**为什么改变？**
+vLLM 已经提供了优秀的进程管理。vLLM Manager 现在专注于 vLLM 不提供的内容：多实例编排。
 
 ## 📄 许可证
 
@@ -406,10 +332,12 @@ MIT License
 
 欢迎贡献！请随时提交 Issue 和 Pull Request。
 
+查看 [ROADMAP.md](ROADMAP.md) 了解计划中的功能。
+
 ---
 
 <div align="center">
 
-**🎉 如果觉得有用，请给个 Star 支持一下！**
+**🎉 如果觉得有用，请给我们一个 Star！**
 
 </div>
