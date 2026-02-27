@@ -56,4 +56,4 @@ jobs:
       - name: Test install from PyPI
         run: |
           pip install vllm-manager
-          python -c "from vllm_manager import VLLMManager; print('Installation successful!')"
+          python -c "from vllm_manager import VLLMCluster; print('Installation successful!')"
