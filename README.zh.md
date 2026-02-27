@@ -1,6 +1,6 @@
 <div align="center">
 
-<!-- Logo Placeholder -->
+<!-- Logo 占位符 -->
 <!-- <img src="assets/logo.jpg" alt="vLLM Manager" width="512"> -->
 
 # vLLM Manager: vLLM 集群编排器
@@ -27,16 +27,32 @@
 
 **vLLM Manager 使用官方 vLLM CLI 启动服务，使用官方 OpenAI SDK 发送请求，专注于日志管理和多实例编排。**
 
-可以把它想象成：
-- **vLLM 的 Kubernetes** - 将多个 vLLM 实例作为集群管理
-- **日志收集器** - 自动捕获和聚合所有实例的日志
-- **高可用层** - 自动故障转移和健康监控
-
 ### 核心设计原则
 
-1. **启动 vLLM** → 使用官方命令 `python -m vllm.entrypoints.openai.api_server --model ...`
-2. **发送请求** → 使用官方 OpenAI SDK `from openai import OpenAI`
-3. **vLLM Manager 负责** → 日志管理 + 多实例编排
+1. **继承而非重复** → `VLLMInstance` 继承自 `AsyncEngineArgs`，自动支持所有 vLLM 参数
+2. **官方 CLI 启动** → `python -m vllm.entrypoints.openai.api_server --model ...`
+3. **官方 SDK 请求** → `from openai import OpenAI`
+4. **专注日志和编排** → 只做 vLLM 不提供的功能
+
+### 为什么继承 `AsyncEngineArgs`？
+
+```python
+# ❌ 错误设计：手动维护参数列表（容易遗漏）
+class VLLMConfig:
+    model: str
+    gpu_memory_utilization: float = 0.9
+    # 遗漏了 pipeline_parallel_size, max_logprobs 等...
+
+# ✅ 正确设计：继承官方类（自动同步）
+class VLLMInstance(AsyncEngineArgs):
+    # 自动拥有 AsyncEngineArgs 的所有参数
+    # 包括未来 vLLM 新增的参数
+```
+
+**好处**：
+- ✅ **参数对齐**：vLLM 更新时无需修改代码
+- ✅ **自动支持**：`pipeline_parallel_size`, `enable_prefix_caching` 等新参数立即生效
+- ✅ **减少维护**：无需手动维护参数列表
 
 ## 🚀 功能特性
 
@@ -70,19 +86,21 @@ from vllm_manager import VLLMCluster, VLLMInstance
 # 创建集群
 cluster = VLLMCluster(log_dir="./vllm_logs")
 
-# 添加实例（配置 vLLM 参数）
+# 添加实例（支持所有 AsyncEngineArgs 参数）
 cluster.add_instance(VLLMInstance(
     name="server1",
     model="facebook/opt-125m",
     port=8000,
     gpu_memory_utilization=0.5,
     max_num_seqs=2,
+    pipeline_parallel_size=2,  # ✅ 自动支持！
 ))
 
 cluster.add_instance(VLLMInstance(
     name="server2",
     model="facebook/opt-350m",
     port=8001,
+    enable_prefix_caching=True,  # ✅ 自动支持！
 ))
 ```
 
@@ -157,25 +175,39 @@ with VLLMCluster() as cluster:
 
 ## 🖥️ 高级用法
 
-### 配置 vLLM 参数
+### 使用任意 vLLM 参数
+
+`VLLMInstance` 继承自 `AsyncEngineArgs`，支持所有 vLLM 参数：
 
 ```python
 VLLMInstance(
-    name="gpu-server",
+    name="advanced-server",
     model="Qwen/Qwen2.5-1.5B-Instruct",
     port=8000,
-    # GPU 配置
-    gpu_memory_utilization=0.5,
+    
+    # 并行配置
     tensor_parallel_size=2,
-    max_num_seqs=2,
+    pipeline_parallel_size=2,          # ✅ 自动支持
+    
+    # 内存配置
+    gpu_memory_utilization=0.5,
     max_model_len=128,
+    max_num_seqs=2,
+    
     # 量化配置
     quantization="awq_marlin",
     dtype="float16",
+    
+    # 性能优化
+    enable_prefix_caching=True,        # ✅ 自动支持
+    enable_chunked_prefill=True,       # ✅ 自动支持
+    
     # 其他配置
     trust_remote_code=True,
     enforce_eager=True,
     api_key="your-api-key",
+    
+    # 任何 AsyncEngineArgs 的新参数都会自动支持！
 )
 ```
 
@@ -217,26 +249,34 @@ instance.stop()
 
 ### VLLMInstance
 
-管理单个 vLLM 实例。
+管理单个 vLLM 实例，**继承自 `vllm.engine.arg_utils.AsyncEngineArgs`**。
 
 ```python
 VLLMInstance(
     name: str,                    # 实例名称
     model: str,                   # 模型名称/路径
     port: int = 8000,             # 端口
+    host: str = "0.0.0.0",        # 主机
     log_dir: Optional[Path] = None,  # 日志目录
+    
+    # 以下所有参数都继承自 AsyncEngineArgs：
     gpu_memory_utilization: float = 0.9,
-    max_num_seqs: int = 256,
     tensor_parallel_size: int = 1,
+    pipeline_parallel_size: int = 1,  # ✅ 自动支持
+    max_model_len: Optional[int] = None,
+    max_num_seqs: int = 256,
     quantization: Optional[str] = None,
+    dtype: str = "auto",
     trust_remote_code: bool = False,
     enforce_eager: bool = False,
-    **kwargs
+    enable_prefix_caching: bool = False,  # ✅ 自动支持
+    enable_chunked_prefill: bool = False, # ✅ 自动支持
+    # ... 以及 AsyncEngineArgs 的所有其他参数
 )
 ```
 
 方法：
-- `start()` - 启动 vLLM 实例
+- `start()` - 启动 vLLM 实例（使用官方 CLI）
 - `stop()` - 停止实例
 - `is_running()` - 检查是否运行中
 - `is_healthy()` - 检查健康状态
@@ -329,6 +369,7 @@ aggregator.export_json("output.json")
 日志格式：
 ```
 2026-02-27 10:12:35 [INFO] [vllm_manager.server1] VLLMInstance 'server1' initialized
+2026-02-27 10:12:35 [INFO] [vllm_manager.server1] Model: facebook/opt-125m
 2026-02-27 10:12:35 [INFO] [vllm_manager.server1] Starting vLLM: python -m vllm.entrypoints.openai.api_server ...
 2026-02-27 10:12:40 [INFO] [vllm_manager.server1] vLLM started with PID: 12345
 2026-02-27 10:12:45 [INFO] [vllm_manager.server1] vLLM is healthy and ready
