@@ -1,14 +1,11 @@
 """
 VLLMInstance - Manages a single vLLM instance using official CLI.
 
-This module starts vLLM using the official command:
-    python -m vllm.entrypoints.openai.api_server --model ... --port ...
-
-It handles:
-- Process spawning with proper configuration
-- Log capture and storage
-- Health check endpoints
-- Graceful shutdown
+This module:
+1. Inherits from official AsyncEngineArgs (parameter alignment)
+2. Starts vLLM using official CLI
+3. Captures and stores logs automatically
+4. Provides health check and OpenAI client
 """
 
 import subprocess
@@ -16,91 +13,38 @@ import logging
 import signal
 import os
 import time
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, field
+from argparse import Namespace
 from openai import OpenAI
 
-
-@dataclass
-class VLLMConfig:
-    """Configuration for vLLM instance using official CLI parameters."""
-
-    model: str
-    host: str = "0.0.0.0"
-    port: int = 8000
-    tensor_parallel_size: int = 1
-    dtype: str = "auto"
-    max_model_len: Optional[int] = None
-    gpu_memory_utilization: float = 0.9
-    swap_space: int = 4
-    quantization: Optional[str] = None
-    api_key: Optional[str] = None
-    trust_remote_code: bool = False
-    enforce_eager: bool = False
-    max_num_seqs: int = 256
-    additional_args: List[str] = field(default_factory=list)
-
-    def to_cli_args(self) -> List[str]:
-        """Convert config to vLLM CLI arguments."""
-        args = [
-            "python",
-            "-m",
-            "vllm.entrypoints.openai.api_server",
-            "--model",
-            self.model,
-            "--host",
-            self.host,
-            "--port",
-            str(self.port),
-            "--tensor-parallel-size",
-            str(self.tensor_parallel_size),
-            "--dtype",
-            self.dtype,
-            "--gpu-memory-utilization",
-            str(self.gpu_memory_utilization),
-            "--swap-space",
-            str(self.swap_space),
-            "--max-num-seqs",
-            str(self.max_num_seqs),
-        ]
-
-        if self.max_model_len is not None:
-            args.extend(["--max-model-len", str(self.max_model_len)])
-
-        if self.quantization:
-            args.extend(["--quantization", self.quantization])
-
-        if self.api_key:
-            args.extend(["--api-key", self.api_key])
-
-        if self.trust_remote_code:
-            args.append("--trust-remote-code")
-
-        if self.enforce_eager:
-            args.append("--enforce-eager")
-
-        args.extend(self.additional_args)
-        return args
+try:
+    from vllm.engine.arg_utils import AsyncEngineArgs
+except ImportError:
+    raise ImportError("vllm package is required. Install with: pip install vllm")
 
 
-class VLLMInstance:
+class VLLMInstance(AsyncEngineArgs):
     """
-    Manages a single vLLM instance using official CLI.
+    Manages a single vLLM instance with automatic log capture.
 
-    This class:
-    1. Starts vLLM using `python -m vllm.entrypoints.openai.api_server`
-    2. Captures and stores logs automatically
-    3. Provides health check via /health endpoint
-    4. Returns OpenAI client for making requests
+    This class inherits from AsyncEngineArgs, so ALL vLLM parameters
+    are automatically supported without manual maintenance.
+
+    What we add:
+    - Process management (start/stop)
+    - Log capture and storage
+    - Health check
+    - OpenAI client wrapper
 
     Args:
         name: Unique instance name
-        model: Model name or path
-        port: Port to bind to
+        port: Port for API server (default: 8000)
+        host: Host to bind (default: 0.0.0.0)
         log_dir: Directory for log files
-        **kwargs: Additional vLLM configuration
+        model: Model name/path (required)
+        **kwargs: ALL AsyncEngineArgs parameters (auto-completed)
 
     Example:
         >>> instance = VLLMInstance(
@@ -109,6 +53,7 @@ class VLLMInstance:
         ...     port=8000,
         ...     gpu_memory_utilization=0.5,
         ...     max_num_seqs=2,
+        ...     pipeline_parallel_size=2,  # Any AsyncEngineArgs param works
         ... )
         >>> instance.start()
         >>>
@@ -127,19 +72,23 @@ class VLLMInstance:
     def __init__(
         self,
         name: str,
-        model: str,
         port: int = 8000,
+        host: str = "0.0.0.0",
         log_dir: Optional[Path] = None,
+        model: str = "",
         **kwargs,
     ):
+        # Store vLLM Manager specific attributes
         self.name = name
-        self.model = model
+        self.host = host
         self.port = port
         self.log_dir = Path(log_dir) if log_dir else Path.cwd() / "vllm_logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
-        # Build config from kwargs
-        self.config = VLLMConfig(model=model, port=port, **kwargs)
+        # Initialize parent AsyncEngineArgs with all vLLM parameters
+        # This ensures we support ALL vLLM parameters automatically
+        kwargs["model"] = model
+        super().__init__(**kwargs)
 
         # Process management
         self.process: Optional[subprocess.Popen] = None
@@ -150,6 +99,21 @@ class VLLMInstance:
         # Setup logging
         self._logger = logging.getLogger(f"vllm_manager.{name}")
         self._setup_logging()
+
+    @property
+    def base_url(self) -> str:
+        """Get the base URL for this instance."""
+        return f"http://{self.host}:{self.port}"
+
+    @property
+    def api_url(self) -> str:
+        """Get the OpenAI-compatible API URL."""
+        return f"{self.base_url}/v1"
+
+    @property
+    def log_file(self) -> Optional[Path]:
+        """Get the log file path."""
+        return self._log_file
 
     def _setup_logging(self):
         """Setup log file for this instance."""
@@ -168,23 +132,29 @@ class VLLMInstance:
         self._logger.setLevel(logging.INFO)
 
         self._logger.info(f"VLLMInstance '{self.name}' initialized")
+        self._logger.info(f"Model: {self.model}")
         self._logger.info(f"Log file: {self._log_file}")
-        self._logger.info(f"Config: {self.config}")
 
-    @property
-    def log_file(self) -> Optional[Path]:
-        """Get the log file path."""
-        return self._log_file
+    def _to_cli_args(self) -> list[str]:
+        """
+        Convert AsyncEngineArgs to CLI arguments.
 
-    @property
-    def base_url(self) -> str:
-        """Get the base URL for this instance."""
-        return f"http://{self.config.host}:{self.port}"
+        Uses official AsyncEngineArgs.to_cli_args() method,
+        then adds host/port which are server-specific.
+        """
+        # Get all vLLM engine args using official method
+        args = self.to_cli_args()
 
-    @property
-    def api_url(self) -> str:
-        """Get the OpenAI-compatible API URL."""
-        return f"{self.base_url}/v1"
+        # Add server-specific args (host/port)
+        # These are not part of AsyncEngineArgs but needed for API server
+        server_args = [
+            "--host",
+            self.host,
+            "--port",
+            str(self.port),
+        ]
+
+        return args + server_args
 
     def start(self) -> bool:
         """
@@ -199,13 +169,15 @@ class VLLMInstance:
         if self.process is not None and self.process.poll() is None:
             raise RuntimeError(f"Instance '{self.name}' is already running")
 
-        cmd = self.config.to_cli_args()
-        self._logger.info(f"Starting vLLM: {' '.join(cmd)}")
+        cmd = self._to_cli_args()
+        self._logger.info(
+            f"Starting vLLM: python -m vllm.entrypoints.openai.api_server {' '.join(cmd)}"
+        )
 
         try:
             # Start vLLM process
             self.process = subprocess.Popen(
-                cmd,
+                ["python", "-m", "vllm.entrypoints.openai.api_server"] + cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

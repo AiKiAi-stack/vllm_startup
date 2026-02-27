@@ -9,7 +9,7 @@ This package provides:
 
 Quick Start:
     >>> from vllm_manager import VLLMCluster, VLLMInstance
-    >>>
+    >>> 
     >>> # Create cluster and add instances
     >>> cluster = VLLMCluster()
     >>> cluster.add_instance(VLLMInstance(
@@ -17,11 +17,11 @@ Quick Start:
     ...     model="facebook/opt-125m",
     ...     port=8000
     ... ))
-    >>>
-    >>> # Start all instances (uses vLLM official CLI internally)
+    >>> 
+    >>> # Start all instances
     >>> cluster.start_all()
-    >>>
-    >>> # Get OpenAI client with automatic load balancing and logging
+    >>> 
+    >>> # Get OpenAI client with load balancing
     >>> client = cluster.get_openai_client()
     >>> response = client.completions.create(
     ...     model="facebook/opt-125m",
@@ -31,11 +31,11 @@ Quick Start:
 For more information, see: https://github.com/AiKiAi-stack/vllm_startup
 """
 
-from .instance import VLLMInstance, VLLMConfig
+from .instance import VLLMInstance
 from .cluster import VLLMCluster
 from .logger import VLLMLogger, LogAggregator
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __author__ = "AiKiAi-stack"
 __author_email__ = "aikeai.stack@gmail.com"
 __license__ = "MIT"
@@ -45,7 +45,6 @@ __url__ = "https://github.com/AiKiAi-stack/vllm_startup"
 __all__ = [
     # Core classes
     "VLLMInstance",
-    "VLLMConfig",
     "VLLMCluster",
     "VLLMLogger",
     "LogAggregator",
