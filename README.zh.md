@@ -1,6 +1,6 @@
 <div align="center">
 
-<!-- Logo 占位符 -->
+<!-- Logo Placeholder -->
 <!-- <img src="assets/logo.jpg" alt="vLLM Manager" width="512"> -->
 
 # vLLM Manager: vLLM 集群编排器
@@ -25,34 +25,27 @@
 
 ## 🎯 vLLM Manager 是什么？
 
-**vLLM Manager 不是 vLLM 的替代品。它为 vLLM 增加了多实例编排能力。**
+**vLLM Manager 使用官方 vLLM CLI 启动服务，使用官方 OpenAI SDK 发送请求，专注于日志管理和多实例编排。**
 
 可以把它想象成：
 - **vLLM 的 Kubernetes** - 将多个 vLLM 实例作为集群管理
-- **LLM 的负载均衡器** - 跨实例的智能请求路由
+- **日志收集器** - 自动捕获和聚合所有实例的日志
 - **高可用层** - 自动故障转移和健康监控
 
-### 为什么需要 vLLM Manager？
+### 核心设计原则
 
-虽然 vLLM 提供了优秀的单实例服务能力，但生产环境部署通常需要：
-
-| 需求 | 仅使用 vLLM | 配合 vLLM Manager |
-|------|------------|------------------|
-| 不同 GPU 上的多模型 | ❌ 手动配置 | ✅ 自动编排 |
-| 跨实例负载均衡 | ❌ 不支持 | ✅ 内置路由策略 |
-| 自动故障转移 | ❌ 不支持 | ✅ 健康检查 & 自动重启 |
-| 统一 API 端点 | ❌ 多端口 | ✅ 单一入口 |
-| 请求队列 | ❌ 不支持 | ✅ 内置队列管理 |
+1. **启动 vLLM** → 使用官方命令 `python -m vllm.entrypoints.openai.api_server --model ...`
+2. **发送请求** → 使用官方 OpenAI SDK `from openai import OpenAI`
+3. **vLLM Manager 负责** → 日志管理 + 多实例编排
 
 ## 🚀 功能特性
 
-- **🎯 多实例集群管理**：将多个 vLLM 实例作为统一集群管理
-- **⚖️ 智能负载均衡**：使用轮询、随机或健康优先策略路由请求
-- **🔄 自动故障转移**：自动检测不健康实例并路由到健康实例
-- **❤️ 健康监控**：持续健康检查与自动恢复
-- **📊 请求指标**：跟踪每个实例的延迟、错误率和吞吐量
-- **🔧 Pythonic API**：简单直观的集群操作接口
-- **🌐 OpenAI 兼容**：与 vLLM 原生 OpenAI 兼容 API 配合使用
+- **🎯 多实例集群管理**：启动/停止多个 vLLM 实例
+- **📝 自动日志收集**：所有实例日志自动保存到文件
+- **🔄 自动故障转移**：请求失败时自动重试其他实例
+- **❤️ 健康监控**：持续健康检查
+- **🔧 OpenAI SDK 集成**：返回标准 OpenAI 客户端
+- **🌐 负载均衡**：轮询策略分发请求
 
 ## 📦 安装
 
@@ -60,214 +53,234 @@
 # 先安装 vLLM
 pip install vllm
 
+# 安装依赖
+pip install openai requests
+
 # 安装 vLLM Manager
 pip install vllm-manager
 ```
 
 ## 🎬 快速开始
 
-### 1. 启动 vLLM 实例
-
-首先，使用官方 vLLM CLI 启动你的服务器：
-
-```bash
-# 终端 1 - 服务器 1
-vllm serve facebook/opt-125m --port 8000
-
-# 终端 2 - 服务器 2
-vllm serve facebook/opt-350m --port 8001
-```
-
-### 2. 创建集群
+### 1. 创建集群并添加实例
 
 ```python
 from vllm_manager import VLLMCluster, VLLMInstance
 
 # 创建集群
-cluster = VLLMCluster()
+cluster = VLLMCluster(log_dir="./vllm_logs")
 
-# 添加实例（假设 vLLM 已在运行）
+# 添加实例（配置 vLLM 参数）
 cluster.add_instance(VLLMInstance(
     name="server1",
-    base_url="http://localhost:8000",
-    model="facebook/opt-125m"
+    model="facebook/opt-125m",
+    port=8000,
+    gpu_memory_utilization=0.5,
+    max_num_seqs=2,
 ))
 
 cluster.add_instance(VLLMInstance(
-    name="server2", 
-    base_url="http://localhost:8001",
-    model="facebook/opt-350m"
+    name="server2",
+    model="facebook/opt-350m",
+    port=8001,
 ))
+```
+
+### 2. 启动所有实例
+
+```python
+# 启动所有实例（使用 vLLM 官方 CLI）
+results = cluster.start_all()
+print(f"Start results: {results}")
 
 # 检查健康状态
 health = cluster.health_check()
-print(f"健康状态: {health}")
+print(f"Health: {health}")
 ```
 
-### 3. 使用负载均衡路由请求
+### 3. 获取 OpenAI 客户端并发送请求
 
 ```python
-from vllm_manager import VLLMRouter, RoutingStrategy
+from openai import OpenAI
 
-# 创建轮询策略的路由器
-router = VLLMRouter(cluster, strategy=RoutingStrategy.ROUND_ROBIN)
+# 获取负载均衡的客户端
+client = cluster.get_openai_client()
 
-# 发送请求（自动负载均衡）
-response = router.chat_completion(
+# 使用标准 OpenAI SDK API
+completion = client.completions.create(
     model="facebook/opt-125m",
-    messages=[{"role": "user", "content": "你好，最近怎么样？"}]
+    prompt="San Francisco is a",
 )
+print("Completion result:", completion)
 
-print(response["choices"][0]["message"]["content"])
+# Chat completions
+chat_response = client.chat.completions.create(
+    model="facebook/opt-125m",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+print("Chat result:", chat_response.choices[0].message.content)
 ```
 
-### 4. 直接使用集群
+### 4. 查看日志
 
 ```python
-# 对话补全（自动路由到合适的实例）
-response = cluster.chat_completion(
-    model="facebook/opt-125m",
-    messages=[{"role": "user", "content": "给我讲个笑话"}]
-)
+from vllm_manager import LogAggregator
 
-# 文本补全
-response = cluster.completion(
-    model="facebook/opt-350m",
-    prompt="从前有座山",
-    max_tokens=100
-)
+# 聚合所有日志
+aggregator = LogAggregator(log_dir="./vllm_logs")
 
-# 获取指标
-metrics = cluster.get_metrics()
-print(f"集群指标: {metrics}")
+# 获取所有日志
+logs = aggregator.get_all_logs(limit=100)
+for log in logs:
+    print(f"[{log.timestamp}] {log.instance}: {log.message}")
+
+# 导出为 JSON
+aggregator.export_json("logs.json")
+```
+
+### 5. 停止集群
+
+```python
+# 停止所有实例
+cluster.stop_all()
+
+# 或使用上下文管理器
+with VLLMCluster() as cluster:
+    cluster.add_instance(VLLMInstance("s1", model="facebook/opt-125m", port=8000))
+    cluster.start_all()
+    
+    client = cluster.get_openai_client()
+    response = client.completions.create(model="facebook/opt-125m", prompt="Hello!")
+    print(response)
+# 退出时自动停止所有实例
 ```
 
 ## 🖥️ 高级用法
 
-### 配置持久化
+### 配置 vLLM 参数
 
 ```python
-# 保存集群配置
-cluster.save_config("cluster.json")
-
-# 之后加载配置
-cluster = VLLMCluster.load_config("cluster.json")
+VLLMInstance(
+    name="gpu-server",
+    model="Qwen/Qwen2.5-1.5B-Instruct",
+    port=8000,
+    # GPU 配置
+    gpu_memory_utilization=0.5,
+    tensor_parallel_size=2,
+    max_num_seqs=2,
+    max_model_len=128,
+    # 量化配置
+    quantization="awq_marlin",
+    dtype="float16",
+    # 其他配置
+    trust_remote_code=True,
+    enforce_eager=True,
+    api_key="your-api-key",
+)
 ```
 
-### 自定义路由策略
+### 自定义日志目录
 
 ```python
-from vllm_manager import RoutingStrategy
+from pathlib import Path
 
-# 健康优先：路由到最健康的实例
-router = VLLMRouter(cluster, strategy=RoutingStrategy.HEALTH_PRIORITY)
-
-# 最少连接：路由到最不忙的实例
-router = VLLMRouter(cluster, strategy=RoutingStrategy.LEAST_CONNECTIONS)
+cluster = VLLMCluster(log_dir=Path("/var/log/vllm"))
 ```
 
-### 直接客户端访问
+### 手动控制单个实例
 
 ```python
-from vllm_manager import VLLMClient
+instance = VLLMInstance(
+    name="solo",
+    model="facebook/opt-125m",
+    port=8000
+)
 
-# 直接连接到 vLLM 实例
-client = VLLMClient(base_url="http://localhost:8000")
+# 启动
+instance.start()
 
-# 健康检查
-if client.health_check():
-    response = client.chat_completion(
-        model="facebook/opt-125m",
-        messages=[{"role": "user", "content": "你好！"}]
-    )
-```
+# 获取客户端
+client = instance.get_client()
+response = client.completions.create(
+    model="facebook/opt-125m",
+    prompt="Test"
+)
 
-### 故障时自动重启
+# 查看日志文件
+print(f"Log file: {instance.log_file}")
 
-```python
-# 为关键实例启用自动重启
-cluster.add_instance(VLLMInstance(
-    name="critical-server",
-    base_url="http://localhost:8000",
-    auto_restart=True,
-    max_restarts=3
-))
-
-# 健康检查会自动重启失败的实例
-cluster.health_check()
+# 停止
+instance.stop()
 ```
 
 ## 📖 API 参考
 
 ### VLLMInstance
 
-代表单个 vLLM 实例。
+管理单个 vLLM 实例。
 
 ```python
 VLLMInstance(
-    name: str,                    # 唯一实例名称
-    base_url: str,                 # vLLM 服务器 URL
-    model: Optional[str] = None,   # 模型名称（可选）
-    api_key: Optional[str] = None, # API 密钥（可选）
-    auto_restart: bool = False,    # 启用自动重启
-    max_restarts: int = 3,         # 最大重启次数
+    name: str,                    # 实例名称
+    model: str,                   # 模型名称/路径
+    port: int = 8000,             # 端口
+    log_dir: Optional[Path] = None,  # 日志目录
+    gpu_memory_utilization: float = 0.9,
+    max_num_seqs: int = 256,
+    tensor_parallel_size: int = 1,
+    quantization: Optional[str] = None,
+    trust_remote_code: bool = False,
+    enforce_eager: bool = False,
+    **kwargs
 )
 ```
 
 方法：
-- `health_check()` - 检查实例是否健康
-- `chat_completion(**kwargs)` - 发送对话补全请求
-- `completion(**kwargs)` - 发送文本补全请求
-- `embedding(**kwargs)` - 发送嵌入请求
-- `get_metrics()` - 获取实例指标
+- `start()` - 启动 vLLM 实例
+- `stop()` - 停止实例
+- `is_running()` - 检查是否运行中
+- `is_healthy()` - 检查健康状态
+- `get_client()` - 获取 OpenAI 客户端
+- `get_status()` - 获取状态信息
 
 ### VLLMCluster
 
-管理多个 VLLMInstance 对象。
+管理多个 vLLM 实例。
 
 ```python
-VLLMCluster()
+VLLMCluster(
+    log_dir: Optional[Path] = None,  # 日志目录
+    name: str = "default"           # 集群名称
+)
 ```
 
 方法：
-- `add_instance(instance)` - 添加实例到集群
-- `remove_instance(name)` - 从集群移除实例
-- `health_check()` - 检查所有实例的健康状态
-- `get_healthy_instances()` - 获取健康实例列表
-- `chat_completion(**kwargs)` - 路由对话补全请求
-- `completion(**kwargs)` - 路由补全请求
-- `get_metrics()` - 获取所有实例的指标
-- `save_config(path)` - 保存配置到 JSON
-- `load_config(path)` - 从 JSON 加载配置
+- `add_instance(instance)` - 添加实例
+- `start_all()` - 启动所有实例
+- `stop_all()` - 停止所有实例
+- `health_check()` - 健康检查
+- `get_openai_client()` - 获取负载均衡客户端
+- `get_status()` - 获取所有实例状态
 
-### VLLMRouter
+### VLLMLogger
 
-具有多种策略的智能请求路由器。
+日志配置。
 
 ```python
-VLLMRouter(
-    cluster: VLLMCluster,
-    strategy: RoutingStrategy = RoutingStrategy.ROUND_ROBIN,
-    health_check_interval: float = 30.0,
+VLLMLogger(
+    log_dir: Optional[Path] = None,
+    level: int = logging.INFO,
 )
 ```
 
-路由策略：
-- `ROUND_ROBIN` - 均匀分配请求
-- `RANDOM` - 随机选择实例
-- `LEAST_CONNECTIONS` - 路由到最近最少使用
-- `HEALTH_PRIORITY` - 优先选择最健康的实例
+### LogAggregator
 
-### VLLMClient
-
-vLLM OpenAI 兼容 API 的直接客户端。
+日志聚合器。
 
 ```python
-VLLMClient(
-    base_url: str,                  # vLLM 服务器 URL
-    api_key: Optional[str] = None,  # API 密钥（可选）
-    timeout: float = 30.0,          # 请求超时时间
-)
+aggregator = LogAggregator(log_dir="./vllm_logs")
+logs = aggregator.get_all_logs(limit=100)
+aggregator.export_json("output.json")
 ```
 
 ## 🏗️ 架构
@@ -275,13 +288,14 @@ VLLMClient(
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    你的应用程序                              │
+│                  from openai import OpenAI                  │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  VLLMRouter / VLLMCluster                   │
+│              VLLMCluster / LoadBalancedClient               │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │  负载均衡 │ 健康检查 │ 故障转移 │ 指标监控              │  │
+│  │  负载均衡 │ 自动重试 │ 健康检查 │ 日志收集              │  │
 │  └───────────────────────────────────────────────────────┘  │
 └────────────────────┬────────────────────────────────────────┘
                      │
@@ -291,38 +305,34 @@ VLLMClient(
     │vLLM #1 │  │vLLM #2 │  │vLLM #3 │
     │:8000   │  │:8001   │  │:8002   │
     └────────┘  └────────┘  └────────┘
+         │           │           │
+         └───────────┴───────────┘
+                     │
+                     ▼
+         ┌───────────────────────┐
+         │   日志文件自动保存      │
+         │  ./vllm_logs/         │
+         └───────────────────────┘
 ```
 
-## ⚠️ 从 v0.1.x 迁移
+## 📝 日志示例
 
-**v0.2.0 中的破坏性变更：**
+启动后，所有日志自动保存到 `./vllm_logs/`：
 
-vLLM Manager v0.2.0 是一次完全重写，专注于集群管理而非进程管理。
-
-### 旧 API (v0.1.x) - 已移除
-```python
-# ❌ 不再支持
-from vllm_manager import VLLMManager
-
-manager = VLLMManager(model="facebook/opt-125m")
-manager.start(port=8000)  # 这管理子进程 - 已移除
+```
+./vllm_logs/
+├── vllm_manager_20260227_101234.log  # Manager 日志
+├── vllm_server1_20260227_101235.log  # Server 1 日志
+└── vllm_server2_20260227_101236.log  # Server 2 日志
 ```
 
-### 新 API (v0.2.0+)
-```python
-# ✅ 新方式 - vLLM Manager 管理集群，而非进程
-from vllm_manager import VLLMCluster, VLLMInstance
-
-# 使用官方 CLI 启动 vLLM
-# vllm serve facebook/opt-125m --port 8000
-
-# 然后使用 vLLM Manager 管理
-cluster = VLLMCluster()
-cluster.add_instance(VLLMInstance("server1", "http://localhost:8000"))
+日志格式：
 ```
-
-**为什么改变？**
-vLLM 已经提供了优秀的进程管理。vLLM Manager 现在专注于 vLLM 不提供的内容：多实例编排。
+2026-02-27 10:12:35 [INFO] [vllm_manager.server1] VLLMInstance 'server1' initialized
+2026-02-27 10:12:35 [INFO] [vllm_manager.server1] Starting vLLM: python -m vllm.entrypoints.openai.api_server ...
+2026-02-27 10:12:40 [INFO] [vllm_manager.server1] vLLM started with PID: 12345
+2026-02-27 10:12:45 [INFO] [vllm_manager.server1] vLLM is healthy and ready
+```
 
 ## 📄 许可证
 
