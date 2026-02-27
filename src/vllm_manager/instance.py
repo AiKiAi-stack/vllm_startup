@@ -111,11 +111,21 @@ class VLLMInstance(AsyncEngineArgs):
         return f"{self.base_url}/v1"
 
     @property
+    def served_model_name(self) -> str:
+        """Get the served model name (last path component of model)."""
+        return self.model.split("/")[-1] if self.model else "unknown"
+
+    @property
     def log_file(self) -> Optional[Path]:
         """Get the log file path."""
         return self._log_file
 
     def _setup_logging(self):
+        """Setup log file for this instance."""
+        # Use model name (last path component) for log file
+        model_name = self.model.split("/")[-1] if self.model else "unknown"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._log_file = self.log_dir / f"vllm_{model_name}_{self.port}_{timestamp}.log"
         """Setup log file for this instance."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._log_file = self.log_dir / f"vllm_{self.name}_{timestamp}.log"
@@ -132,7 +142,8 @@ class VLLMInstance(AsyncEngineArgs):
         self._logger.setLevel(logging.INFO)
 
         self._logger.info(f"VLLMInstance '{self.name}' initialized")
-        self._logger.info(f"Model: {self.model}")
+        self._logger.info(f"Model: {self.model} -> {model_name}")
+        self._logger.info(f"Port: {self.port}")
         self._logger.info(f"Log file: {self._log_file}")
 
     def _to_cli_args(self) -> list[str]:
